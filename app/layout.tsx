@@ -5,7 +5,7 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Parity | Bitget Tri-venue Divergence Monitor",
+  title: "Parity",
   description: "Real-time dislocation tracking across rToken, perp mark, and perp index on Bitget US Stocks.",
 };
 

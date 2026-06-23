@@ -1,36 +1,263 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Parity - Tri-Venue Divergence Monitor
+
+> Real-time price dislocation detection across Bitget's three parallel US stock venues.  
+
+---
+
+## What is Parity?
+
+Bitget lists the same US equity in three parallel, Bitget-native venues simultaneously:
+
+| Venue | Example | Description |
+|---|---|---|
+| **rToken spot** | `RTSLAUSDT` | Tokenized stock, traded on Bitget spot order book |
+| **onToken spot** | `TSLAONUSDT` | Second onchain token, thinner book |
+| **Perp mark price** | `TSLAUSDT` | Bitget's fair-value price for the futures contract |
+| **Perp index price** | `TSLAUSDT` | Bitget's reference price, tracks real-world NASDAQ |
+
+In an efficient market these four prices are identical. In practice they drift. **Parity is the missing observability layer** — it monitors all four venues in real time, detects statistically unusual dislocations, and logs every event with full cost-modeled simulated P&L.
+
+It is also designed as **agent-callable infrastructure**: any trading agent can hit the MCP endpoints to check divergence state before entering a position, without running the full stack themselves.
+
+---
+
+## Architecture
+
+```
+parity/              ← Next.js 14 app 
+  app/
+    api/
+      ticks/         ← POST: ingest ticks | GET: query recent ticks
+      divergences/   ← GET: recent divergence events
+      leaderboard/   ← GET: ranked dislocation summary
+      mcp/
+        check_divergence/     ← MCP tool: current divergence state for a symbol
+        active_divergences/   ← MCP tool: all currently open simulated events
+    dashboard/       ← Live dashboard UI
+  lib/
+    db.ts            ← SQLite persistence (better-sqlite3)
+    engine.ts        ← Rolling z-score engine + event lifecycle
+    constants.ts     ← Thresholds, cost assumptions, window sizes
+  components/
+    PriceChart.tsx       ← Live three-venue price chart + spread chart
+    DivergenceCard.tsx   ← Per-event card with P&L and resolution status
+    DashboardClient.tsx  ← Symbol selector + layout
+    Leaderboard.tsx      ← Ranked table across all symbols
+  types/index.ts     ← Shared TypeScript types
+
+parity-poller/       ← Express app (port 3001)
+  src/
+    bitget.ts        ← Bitget REST API calls with timeout + error handling
+    index.ts         ← Poll loop + engine trigger + /health /status endpoints
+```
+
+**Data flow:**
+
+```
+Bitget API
+    ↓  (every 5s)
+parity-poller  →  POST /api/ticks  →  parity (Next.js)
+                                           ↓
+                                      SQLite (parity.db)
+                                           ↓
+parity-poller  →  GET /api/mcp/check_divergence  →  z-score engine
+                                                         ↓
+                                               divergence_events table
+                                                         ↓
+                                               Dashboard + MCP endpoints
+```
+
+---
+
+## Core Engine
+
+### Spreads tracked (per tick, per symbol)
+
+| Spread | Formula | What it detects |
+|---|---|---|
+| `rtoken_vs_index` | `(rToken − index) / index` | rToken mispriced vs real-world reference |
+| `mark_vs_index` | `(mark − index) / index` | Futures fair value drift from reference |
+| `rtoken_vs_mark` | `(rToken − mark) / mark` | rToken vs futures divergence |
+| `ontoken_vs_rtoken` | `(onToken − rToken) / rToken` | Two spot venues diverging |
+| `ontoken_vs_mark` | `(onToken − mark) / mark` | onToken vs futures |
+
+### Z-score flagging
+
+For each spread, the engine maintains a rolling window of the last **360 ticks (~30 minutes at 5s polling)**. It computes the rolling mean and standard deviation, then flags when:
+
+```
+|z| = |(current_spread − rolling_mean) / rolling_stdev| > 2.5
+```
+
+This means "this spread is unusual *for this stock right now*" — not just "any gap exists." It self-adjusts to each stock's natural volatility.
+
+### Cost-modeled simulated P&L
+
+Every flagged event simulates the convergence trade and subtracts realistic execution costs:
+
+| Cost | Value | Rationale |
+|---|---|---|
+| Spot fee (rToken) | 0.1% per side | Bitget spot maker/taker |
+| Perp taker fee | 0.06% per side | Bitget futures taker |
+| rToken slippage | 0.2% per side | Thin book assumption |
+| Perp slippage | 0.05% per side | Liquid futures book |
+| Funding cost | Full rate if held > 4h | Bitget 8h funding interval |
+
+Events close when the z-score reverts below 0.5, times out after 720 ticks (~60 min), or is flagged as a false signal (implausible price jump > 10% in one tick).
+
+---
+
+## MCP / Agent Hub Endpoints
+
+These endpoints are stable, unauthenticated, and designed to be called by trading agents.
+
+### `GET /api/mcp/check_divergence?symbol=TSLAUSDT`
+
+Returns the current divergence state for a symbol. Agents call this before entering a position.
+
+```json
+{
+  "tool": "check_divergence",
+  "symbol": "TSLAUSDT",
+  "ts": 1782242810881,
+  "flagged": false,
+  "spreads": {
+    "rtoken_vs_index":   { "spread": -0.000611, "z":  1.09, "mean": -0.000737, "stdev": 0.000115 },
+    "mark_vs_index":     { "spread": -0.0000096,"z": -0.94, "mean":  0.000097, "stdev": 0.000114 },
+    "rtoken_vs_mark":    { "spread": -0.000602, "z":  1.56, "mean": -0.000834, "stdev": 0.000149 },
+    "ontoken_vs_rtoken": { "spread":  0.000681, "z":  0.27, "mean":  0.000487, "stdev": 0.000730 },
+    "ontoken_vs_mark":   { "spread":  0.0000785,"z":  0.61, "mean": -0.000350, "stdev": 0.000703 }
+  },
+  "prices": {
+    "rtoken":     381.92,
+    "ontoken":    382.18,
+    "perp_mark":  382.15,
+    "perp_index": 382.1537
+  }
+}
+```
+
+### `GET /api/mcp/active_divergences`
+
+Returns all currently open simulated events across all symbols.
+
+```json
+{
+  "tool": "get_active_divergences",
+  "count": 1,
+  "events": [
+    {
+      "id": 42,
+      "symbol": "TSLAUSDT",
+      "asset_class": "stock",
+      "opened_at": 1782237000000,
+      "z_mark_vs_index": 0.2,
+      "z_rtoken_vs_index": 2.9,
+      "z_rtoken_vs_mark": 2.7,
+      "simulated_legs": "long rtoken / short mark"
+    }
+  ]
+}
+```
+
+---
+
+## Supported Symbols
+
+| Ticker | rToken | onToken | Perp |
+|---|---|---|---|
+| TSLA | `RTSLAUSDT` | `TSLAONUSDT` | `TSLAUSDT` |
+| AAPL | `RAAPLUSDT` | `AAPLONUSDT` | `AAPLUSDT` |
+| GOOGL | `RGOOGLUSDT` | `GOOGLONUSDT` | `GOOGLUSDT` |
+| MSFT | `RMSFTUSDT` | `MSFTONUSDT` | `MSFTUSDT` |
+| AMZN | `RAMZNUSDT` | `AMZNONUSDT` | `AMZNUSDT` |
+
+All symbols verified live against Bitget API. Product type: `USDT-FUTURES`.
+
+---
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
+
+- Node.js 18+
+- Two terminal sessions (Next.js app + poller)
+
+### 1. Clone and install
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+git clone https://github.com/YOUR_USERNAME/parity
+cd parity && npm install
+cd ../parity-poller && npm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 2. Configure environment
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+# parity/.env.local
+POLLER_URL=http://localhost:3001
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+# parity-poller/.env
+NEXT_URL=http://localhost:3000
+PORT=3001
+POLL_INTERVAL_MS=5000
+```
 
-## Learn More
+### 3. Start the Next.js app
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+cd parity
+npm run dev
+# → http://localhost:3000
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### 4. Start the poller
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+cd parity-poller
+npm run dev
+# → Inserts 5 ticks every 5s
+# → Calls /api/mcp/check_divergence after each batch
+```
 
-## Deploy on Vercel
+### 5. Open the dashboard
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Navigate to [http://localhost:3000/dashboard](http://localhost:3000/dashboard).
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+The price chart populates immediately. The z-score engine needs **~30 minutes of ticks** (~360 per symbol) before the rolling baseline is meaningful and divergence events will start firing.
+
+---
+
+## Dashboard
+
+The dashboard shows:
+
+- **Symbol selector** — switch between TSLA, AAPL, GOOGL, MSFT, AMZN
+- **Three-venue price chart** — live rToken, mark, and index price lines
+- **Mark vs Index spread (%)** — secondary chart showing the tightest spread in real time
+- **Dislocation leaderboard** — all symbols ranked by average z-score, with total simulated P&L
+- **Recent divergence events** — per-event cards showing z-scores, legs, resolution status, and net P&L after costs
+- **MCP endpoint reference** — live URLs for the currently selected symbol
+
+---
+ 
+## Project Structure — Key Files
+
+| File | Purpose |
+|---|---|
+| `lib/engine.ts` | Z-score computation, spread calculation, event open/close logic |
+| `lib/db.ts` | SQLite schema, tick insert, event CRUD, leaderboard query |
+| `lib/constants.ts` | All thresholds and cost parameters in one place |
+| `app/api/mcp/` | Agent-callable endpoints |
+| `parity-poller/src/index.ts` | Poll loop, engine trigger, status server |
+| `parity-poller/src/bitget.ts` | Bitget API calls with timeout and null-safe error handling |
+
+---
+
+## Bitget APIs Used
+
+- `GET /api/v2/spot/market/tickers?symbol=RTSLAUSDT` — rToken spot price
+- `GET /api/v2/spot/market/tickers?symbol=TSLAONUSDT` — onToken spot price  
+- `GET /api/v2/mix/market/ticker?symbol=TSLAUSDT&productType=USDT-FUTURES` — perp mark, index, funding rate
+- `GET /api/v2/spot/public/symbols` — symbol discovery (used during development)
+- `GET /api/v2/mix/market/contracts?productType=USDT-FUTURES` — contract discovery

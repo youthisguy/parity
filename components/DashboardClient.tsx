@@ -11,7 +11,7 @@ const SYMBOLS = [
   { perp: "GOOGLUSDT", label: "GOOGL", name: "Alphabet" },
   { perp: "MSFTUSDT",  label: "MSFT",  name: "Microsoft" },
   { perp: "AMZNUSDT",  label: "AMZN",  name: "Amazon" },
-  { perp: "NVDAUSDT",  label: "NVDA",  name: "NVIDIA" },
+//   { perp: "NVDAUSDT",  label: "NVDA",  name: "NVIDIA" },
 ];
 
 export function DashboardClient() {
@@ -110,7 +110,7 @@ export function DashboardClient() {
             <span className="text-slate-300 break-all select-all">/api/mcp/active_divergences</span>
           </div>
           <p className="text-slate-500 text-[11px] italic pt-1 pl-1">
-            Stable, agent-callable JSON — same engine, no auth required.
+             agent-callable JSON
           </p>
         </div>
       </section>

@@ -18,7 +18,7 @@ export function Leaderboard() {
   }, []);
 
   if (rows.length === 0) {
-    return <p className="text-sm text-gray-500">No data yet — leaderboard populates after divergence events are logged.</p>;
+    return <p className="text-sm text-gray-500">No data yet.</p>;
   }
 
   return (
