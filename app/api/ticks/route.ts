@@ -19,6 +19,7 @@ export async function POST(req: NextRequest) {
           asset_class: tick.asset_class ?? "stock",
           ts: tick.ts,
           rtoken_price: tick.rtoken_price ?? null,
+          ontoken_price: tick.ontoken_price ?? null,  
           perp_mark: tick.perp_mark ?? null,
           perp_index: tick.perp_index ?? null,
           funding_rate: tick.funding_rate ?? null,

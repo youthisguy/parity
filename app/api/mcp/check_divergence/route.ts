@@ -33,13 +33,21 @@ export async function GET(req: NextRequest) {
   }
 
   // Build rolling spread history
-  const history = { rtokenVsIndex: [] as number[], markVsIndex: [] as number[], rtokenVsMark: [] as number[] };
-  const sorted = [...ticks].reverse(); // oldest first
+  const history = {
+    rtokenVsIndex: [] as number[],
+    markVsIndex: [] as number[],
+    rtokenVsMark: [] as number[],
+    ontokenVsRtoken: [] as number[],   
+    ontokenVsMark: [] as number[] 
+  };
+  const sorted = [...ticks].reverse();
   for (const t of sorted.slice(0, -1)) {
     const s = computeSpreads(t);
-    if (s.rtokenVsIndex != null) history.rtokenVsIndex.push(s.rtokenVsIndex);
-    if (s.markVsIndex != null) history.markVsIndex.push(s.markVsIndex);
-    if (s.rtokenVsMark != null) history.rtokenVsMark.push(s.rtokenVsMark);
+    if (s.rtokenVsIndex != null)    history.rtokenVsIndex.push(s.rtokenVsIndex);
+    if (s.markVsIndex != null)      history.markVsIndex.push(s.markVsIndex);
+    if (s.rtokenVsMark != null)     history.rtokenVsMark.push(s.rtokenVsMark);
+    if (s.ontokenVsRtoken != null)  history.ontokenVsRtoken.push(s.ontokenVsRtoken);  
+    if (s.ontokenVsMark != null)    history.ontokenVsMark.push(s.ontokenVsMark);     
   }
 
   const latest = sorted[sorted.length - 1];
@@ -54,9 +62,12 @@ export async function GET(req: NextRequest) {
       rtoken_vs_index: result.rtoken_vs_index,
       mark_vs_index: result.mark_vs_index,
       rtoken_vs_mark: result.rtoken_vs_mark,
+      ontoken_vs_rtoken: result.ontoken_vs_rtoken,  
+      ontoken_vs_mark: result.ontoken_vs_mark,     
     },
     prices: {
       rtoken: latest.rtoken_price,
+      ontoken: latest.ontoken_price,           
       perp_mark: latest.perp_mark,
       perp_index: latest.perp_index,
     },
