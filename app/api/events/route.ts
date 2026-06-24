@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { insertEvent } from "@/lib/db";
+import { insertEvent, getOpenEvents, closeEvent } from "@/lib/db";
 
 export async function POST(req: NextRequest) {
   try {
@@ -43,6 +43,73 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ id });
   } catch (err) {
     console.error("[POST /api/events]", err);
+    return NextResponse.json({ error: String(err) }, { status: 500 });
+  }
+}
+
+export async function PATCH(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const { symbol, ts, prices, resolution } = body;
+
+    const openEvents = await getOpenEvents();
+    const event = openEvents
+      .filter(e => e.symbol === symbol)
+      .sort((a, b) => b.opened_at - a.opened_at)[0];
+
+    if (!event?.id) {
+      return NextResponse.json({ error: "no open event" }, { status: 404 });
+    }
+
+    const exitLong  = prices.rtoken    ?? event.entry_price_long;
+    const exitShort = prices.perp_mark ?? event.entry_price_short;
+    const grossPnl  = (exitLong  - event.entry_price_long)  / event.entry_price_long
+                    - (exitShort - event.entry_price_short) / event.entry_price_short;
+    const feeCost      = 0.001 * 2 + 0.0006 * 2;
+    const slippageCost = 0.002 * 2 + 0.0005 * 2;
+    const netPnl       = grossPnl - feeCost - slippageCost;
+
+    await closeEvent(event.id, {
+      closed_at:        ts,
+      exit_price_long:  exitLong,
+      exit_price_short: exitShort,
+      fee_cost:         feeCost,
+      slippage_cost:    slippageCost,
+      funding_cost:     0,
+      gross_pnl:        grossPnl,
+      net_pnl:          netPnl,
+      resolution:       resolution ?? "reverted",
+    });
+
+    return NextResponse.json({ closed: event.id, net_pnl: netPnl });
+  } catch (err) {
+    console.error("[PATCH /api/events]", err);
+    return NextResponse.json({ error: String(err) }, { status: 500 });
+  }
+}
+
+export async function DELETE(_req: NextRequest) {
+  try {
+    const openEvents = await getOpenEvents();
+    let closed = 0;
+    for (const event of openEvents) {
+      if (!event.id) continue;
+      await closeEvent(event.id, {
+        closed_at:        Date.now(),
+        exit_price_long:  event.entry_price_long,
+        exit_price_short: event.entry_price_short,
+        fee_cost:         0,
+        slippage_cost:    0,
+        funding_cost:     0,
+        gross_pnl:        0,
+        net_pnl:          0,
+        resolution:       "timeout",
+      });
+      closed++;
+    }
+    return NextResponse.json({ closed });
+  } catch (err) {
+    console.error("[DELETE /api/events]", err);
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }
 }
