@@ -1,15 +1,15 @@
 // ── Z-score threshold for flagging a divergence
-export const Z_THRESHOLD = 2.5;
+export const Z_THRESHOLD = 3.0;     
 
 // ── Rolling window for mean/stdev calculation (number of ticks)
 // At 5s polling that's 12 ticks/min → 360 = 30 min window
-export const ROLLING_WINDOW = 360;
+export const ROLLING_WINDOW = 720;
 
 // ── Event timeout: close as "timeout" if spread hasn't reverted after N ticks
 export const EVENT_TIMEOUT_TICKS = 720; // ~60 min at 5s
 
 // ── Reversion threshold: close event when |z| drops below this
-export const REVERSION_Z = 0.5;
+export const REVERSION_Z = 1.0;
 
 // ── False-signal filter: reject a tick if any price jumps more than this % in one step
 export const IMPLAUSIBLE_JUMP_PCT = 0.10; // 10%
