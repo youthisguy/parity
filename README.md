@@ -24,18 +24,19 @@ It is also designed as **agent-callable infrastructure**: any trading agent can 
 ## Architecture
 
 ```
-parity/              ← Next.js 14 app 
+parity/              ← Next.js app 
   app/
     api/
       ticks/         ← POST: ingest ticks | GET: query recent ticks
       divergences/   ← GET: recent divergence events
       leaderboard/   ← GET: ranked dislocation summary
+      events/        ← POST: open event | PATCH: close event | DELETE: bulk close
       mcp/
         check_divergence/     ← MCP tool: current divergence state for a symbol
         active_divergences/   ← MCP tool: all currently open simulated events
     dashboard/       ← Live dashboard UI
   lib/
-    db.ts            ← SQLite persistence (better-sqlite3)
+    db.ts            ← Turso (libSQL over HTTP) persistence
     engine.ts        ← Rolling z-score engine + event lifecycle
     constants.ts     ← Thresholds, cost assumptions, window sizes
   components/
@@ -58,7 +59,7 @@ Bitget API
     ↓  (every 5s)
 parity-poller  →  POST /api/ticks  →  parity (Next.js)
                                            ↓
-                                      SQLite (parity.db)
+                                      Turso (libSQL)
                                            ↓
 parity-poller  →  GET /api/mcp/check_divergence  →  z-score engine
                                                          ↓
@@ -196,6 +197,8 @@ cd ../parity-poller && npm install
 ```bash
 # parity/.env.local
 POLLER_URL=http://localhost:3001
+TURSO_URL=libsql://your-db.turso.io
+TURSO_TOKEN=your-token-here
 
 # parity-poller/.env
 NEXT_URL=http://localhost:3000
@@ -246,11 +249,21 @@ The dashboard shows:
 | File | Purpose |
 |---|---|
 | `lib/engine.ts` | Z-score computation, spread calculation, event open/close logic |
-| `lib/db.ts` | SQLite schema, tick insert, event CRUD, leaderboard query |
+| `lib/db.ts` | Turso (libSQL over HTTP) schema, tick insert, event CRUD, leaderboard query |
 | `lib/constants.ts` | All thresholds and cost parameters in one place |
 | `app/api/mcp/` | Agent-callable endpoints |
 | `parity-poller/src/index.ts` | Poll loop, engine trigger, status server |
 | `parity-poller/src/bitget.ts` | Bitget API calls with timeout and null-safe error handling |
+
+---
+
+## Live Deployment
+
+- **Dashboard:** https://parity-monitor.up.railway.app/dashboard
+- **MCP check:** https://parity-monitor.up.railway.app/api/mcp/check_divergence?symbol=TSLAUSDT
+- **Active divergences:** https://parity-monitor.up.railway.app/api/mcp/active_divergences
+- **Poller status:** https://parity-poller.onrender.com/status
+- **Poller repo:** https://github.com/youthisguy/parity-poller
 
 ---
 

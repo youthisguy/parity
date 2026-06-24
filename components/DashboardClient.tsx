@@ -28,7 +28,7 @@ export function DashboardClient() {
             className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold border transition-all ${
               selected.perp === s.perp
                 ? "bg-cyan-500/20 text-cyan-300 border-cyan-500/50  "
-                : "bg-slate-900/60 text-slate-400 border-slate-700/60 hover:border-slate-500 hover:text-slate-200"
+                : "bg-[#161616] text-slate-400 border-slate-700/60 hover:border-slate-500 hover:text-slate-200"
             }`}
           >
             {s.label}
@@ -99,34 +99,36 @@ export function DashboardClient() {
 
       {/* MCP Endpoints */}
       <section className="bg-[#161616] border border-[#161616]/60 rounded-xl overflow-hidden">
-        <div className="border-b border-[#161616]/60 px-5 py-3.5 bg-[#161616]">
-          <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-            <span className="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
-            Agent Hub / MCP Endpoints
-          </h2>
+  <div className="border-b border-[#161616]/60 px-5 py-3.5 bg-[#161616]">
+    <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+      <span className="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
+      Agent Hub / MCP Endpoints
+    </h2>
+  </div>
+  <div className="p-5 font-mono text-xs space-y-2 bg-slate-950/20">
+
+    {[
+      { method: "GET", url: `/api/mcp/check_divergence?symbol=${selected.perp}`, label: "Live divergence check" },
+      { method: "GET", url: "/api/mcp/active_divergences",                        label: "All currently open divergence events" },
+      { method: "GET", url: "/api/divergences?limit=10",                          label: "Recent logged + closed events with P&L" },
+      { method: "GET", url: `/api/ticks?symbol=${selected.perp}&limit=5`,         label: "Recent ticks" },
+    ].map(({ method, url, label }) => (
+      <div key={url} className="flex flex-col gap-0.5 p-2.5 rounded bg-slate-900/10 border border-[#161616]/40">
+        <div className="flex items-center gap-3">
+          <span className="w-12 text-center font-bold text-[10px] bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 px-1.5 py-0.5 rounded shrink-0">
+            {method}
+          </span>
+          <span className="text-slate-300 break-all select-all">{url}</span>
         </div>
-        <div className="p-5 font-mono text-xs space-y-3 bg-slate-950/20">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 p-2.5 rounded bg-slate-900/10 border border-[#161616]/40">
-            <span className="w-12 text-center font-bold text-[10px] bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 px-1.5 py-0.5 rounded shrink-0">
-              GET
-            </span>
-            <span className="text-slate-300 break-all select-all">
-              /api/mcp/check_divergence?symbol={selected.perp}
-            </span>
-          </div>
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 p-2.5 rounded bg-slate-900/10 border border-[#161616]/40">
-            <span className="w-12 text-center font-bold text-[10px] bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 px-1.5 py-0.5 rounded shrink-0">
-              GET
-            </span>
-            <span className="text-slate-300 break-all select-all">
-              /api/mcp/active_divergences
-            </span>
-          </div>
-          <p className="text-slate-500 text-[11px] italic pt-1 pl-1">
-            agent-callable JSON
-          </p>
-        </div>
-      </section>
+        <p className="text-slate-600 text-[10px] pl-[60px]">{label}</p>
+      </div>
+    ))}
+
+    <p className="text-slate-500 text-[11px] italic pt-1 pl-1">
+      agent-callable JSON. 
+    </p>
+  </div>
+</section>
     </div>
   );
 }
