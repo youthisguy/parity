@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { insertEvent, getOpenEvents, closeEvent } from "@/lib/db";
+import {
+  SPOT_FEE,
+  PERP_TAKER_FEE,
+  SLIPPAGE_RTOKEN,
+  SLIPPAGE_PERP,
+} from "@/lib/constants";
 
 export async function POST(req: NextRequest) {
   try {
@@ -54,31 +60,32 @@ export async function PATCH(req: NextRequest) {
 
     const openEvents = await getOpenEvents();
     const event = openEvents
-      .filter(e => e.symbol === symbol)
+      .filter((e) => e.symbol === symbol)
       .sort((a, b) => b.opened_at - a.opened_at)[0];
 
     if (!event?.id) {
       return NextResponse.json({ error: "no open event" }, { status: 404 });
     }
 
-    const exitLong  = prices.rtoken    ?? event.entry_price_long;
+    const exitLong = prices.rtoken ?? event.entry_price_long;
     const exitShort = prices.perp_mark ?? event.entry_price_short;
-    const grossPnl  = (exitLong  - event.entry_price_long)  / event.entry_price_long
-                    - (exitShort - event.entry_price_short) / event.entry_price_short;
-    const feeCost      = 0.001 * 2 + 0.0006 * 2;
-    const slippageCost = 0.002 * 2 + 0.0005 * 2;
-    const netPnl       = grossPnl - feeCost - slippageCost;
+    const grossPnl =
+      (exitLong - event.entry_price_long) / event.entry_price_long -
+      (exitShort - event.entry_price_short) / event.entry_price_short;
+    const feeCost = SPOT_FEE * 2 + PERP_TAKER_FEE * 2;
+    const slippageCost = SLIPPAGE_RTOKEN * 2 + SLIPPAGE_PERP * 2;
+    const netPnl = grossPnl - feeCost - slippageCost;
 
     await closeEvent(event.id, {
-      closed_at:        ts,
-      exit_price_long:  exitLong,
+      closed_at: ts,
+      exit_price_long: exitLong,
       exit_price_short: exitShort,
-      fee_cost:         feeCost,
-      slippage_cost:    slippageCost,
-      funding_cost:     0,
-      gross_pnl:        grossPnl,
-      net_pnl:          netPnl,
-      resolution:       resolution ?? "reverted",
+      fee_cost: feeCost,
+      slippage_cost: slippageCost,
+      funding_cost: 0,
+      gross_pnl: grossPnl,
+      net_pnl: netPnl,
+      resolution: resolution ?? "reverted",
     });
 
     return NextResponse.json({ closed: event.id, net_pnl: netPnl });
@@ -95,15 +102,15 @@ export async function DELETE(_req: NextRequest) {
     for (const event of openEvents) {
       if (!event.id) continue;
       await closeEvent(event.id, {
-        closed_at:        Date.now(),
-        exit_price_long:  event.entry_price_long,
+        closed_at: Date.now(),
+        exit_price_long: event.entry_price_long,
         exit_price_short: event.entry_price_short,
-        fee_cost:         0,
-        slippage_cost:    0,
-        funding_cost:     0,
-        gross_pnl:        0,
-        net_pnl:          0,
-        resolution:       "timeout",
+        fee_cost: 0,
+        slippage_cost: 0,
+        funding_cost: 0,
+        gross_pnl: 0,
+        net_pnl: 0,
+        resolution: "timeout",
       });
       closed++;
     }

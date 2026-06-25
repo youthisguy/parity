@@ -94,17 +94,25 @@ This means "this spread is unusual *for this stock right now*" — not just "any
 
 ### Cost-modeled simulated P&L
 
-Every flagged event simulates the convergence trade and subtracts realistic execution costs:
+Every flagged event simulates the convergence trade and subtracts realistic execution costs across two scenarios — conservative (standard retail) and optimistic (BGB discount + active stock futures promo). 
 
-| Cost | Value | Rationale |
-|---|---|---|
-| Spot fee (rToken) | 0.1% per side | Bitget spot maker/taker |
-| Perp taker fee | 0.06% per side | Bitget futures taker |
-| rToken slippage | 0.2% per side | Thin book assumption |
-| Perp slippage | 0.05% per side | Liquid futures book |
-| Funding cost | Full rate if held > 4h | Bitget 8h funding interval |
+All cost parameters are centralized in `lib/constants.ts` and applied consistently across every simulated event — no cherry-picking per trade.
 
 Events close when the z-score reverts below 0.5, times out after 720 ticks (~60 min), or is flagged as a false signal (implausible price jump > 10% in one tick).
+
+### Fee assumptions
+
+The default constants model conservative fees. With BGB discount and Bitget's active stock futures promo (valid through June 30, 2026), realistic round-trip costs drop significantly:
+
+| Cost | Conservative | Optimistic (BGB + promo) | Rationale |
+|---|---|---|---|
+| Spot fee (rToken) | 0.1% per side | 0.08% per side | BGB 20% discount on spot |
+| Perp taker fee | 0.06% per side | 0.0065% per side | Stock futures promo rate |
+| rToken slippage | 0.2% per side | 0.06% per side | Limit orders, patient fill |
+| Perp slippage | 0.05% per side | 0.01% per side | Deep perp book |
+| **Total round-trip** | **~0.81%** | **~0.175%** | |
+
+Update `lib/constants.ts` to switch between scenarios.
 
 ---
 
