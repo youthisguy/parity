@@ -5,7 +5,7 @@ export const Z_THRESHOLD = 5.0;
 export const ROLLING_WINDOW = 360;
 
 // ── Event timeout ticks
-export const EVENT_TIMEOUT_TICKS = 120;
+export const EVENT_TIMEOUT_TICKS = 720;
 
 // ── Reversion threshold
 export const REVERSION_Z = 0.5;

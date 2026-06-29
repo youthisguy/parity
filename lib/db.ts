@@ -201,7 +201,7 @@ export function getLeaderboard(): LeaderboardRow[] {
       COUNT(*) as event_count,
       AVG(ABS(z_mark_vs_index)) as avg_z,
       AVG(COALESCE(net_pnl, 0)) as avg_net_pnl,
-      SUM(COALESCE(net_pnl, 0)) as total_net_pnl,
+      SUM(CASE WHEN net_pnl > 0 THEN net_pnl ELSE 0 END) as total_net_pnl,
       MAX(opened_at) as last_seen
     FROM divergence_events
     WHERE resolution != 'false_signal'
