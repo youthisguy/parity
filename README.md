@@ -17,7 +17,7 @@ Bitget lists the same US equity in three parallel, Bitget-native venues simultan
 
 In an efficient market these four prices are identical. In practice they drift. **Parity is the missing observability layer** — it monitors all four venues in real time, detects statistically unusual dislocations, and logs every event with full cost-modeled simulated P&L.
 
-It is also designed as **agent-callable infrastructure**: any trading agent can hit the MCP endpoints to check divergence state before entering a position, without running the full stack themselves.
+It is also designed as **agent-callable infrastructure**: any trading agent can hit the MCP endpoints to check divergence state before entering a position, without running the full stack themselves. Beyond detection, Parity includes an execution layer that autonomously trades the convergence signal directly on Bitget when net edge clears a configurable cost threshold — see [Execution Agent](#execution-agent-v2) below.
 
 ---
 
@@ -34,11 +34,14 @@ parity/              ← Next.js app
       mcp/
         check_divergence/     ← MCP tool: current divergence state for a symbol
         active_divergences/   ← MCP tool: all currently open simulated events
+        execute_trade/        ← MCP tool: places real long rToken + short perp orders if net edge clears threshold
+        close_trade/          ← MCP tool: flattens both legs of an open position
     dashboard/       ← Live dashboard UI
   lib/
     db.ts            ← Turso (libSQL over HTTP) persistence
     engine.ts        ← Rolling z-score engine + event lifecycle
     constants.ts     ← Thresholds, cost assumptions, window sizes
+    bitget-auth.ts   ← HMAC-SHA256 request signing + symbol mapping for execution
   components/
     PriceChart.tsx       ← Live three-venue price chart + spread chart
     DivergenceCard.tsx   ← Per-event card with P&L and resolution status
@@ -49,7 +52,7 @@ parity/              ← Next.js app
 parity-poller/       ← Express app (port 3001)
   src/
     bitget.ts        ← Bitget REST API calls with timeout + error handling
-    index.ts         ← Poll loop + engine trigger + /health /status endpoints
+    index.ts         ← Poll loop + engine trigger + execution/close calls + /health /status endpoints
 ```
 
 **Data flow:**
@@ -63,9 +66,14 @@ parity-poller  →  POST /api/ticks  →  parity (Next.js)
                                            ↓
 parity-poller  →  GET /api/mcp/check_divergence  →  z-score engine
                                                          ↓
-                                               divergence_events table
-                                                         ↓
-                                               Dashboard + MCP endpoints
+                                ┌────────────────────────┴────────────────────────┐
+                                ↓                                                 ↓
+                      divergence_events table                      execute_trade / close_trade
+                      (simulated log, always written)               (real signed orders, when
+                                ↓                                    net edge clears threshold)
+                      Dashboard + MCP endpoints                                  ↓
+                                                                        Bitget sub-account
+                                                                    (spot + futures wallets)
 ```
 
 ---
@@ -115,6 +123,26 @@ The default constants model conservative fees. With BGB discount and Bitget's ac
 Update `lib/constants.ts` to switch between scenarios.
 
 ---
+
+---
+
+## Execution Agent (v2)
+
+Beyond detection, Parity includes an experimental autonomous execution layer that attempts to trade the convergence signal directly on Bitget.
+
+### How it works
+
+1. **Detect** — the existing z-score engine flags a dislocation (|z| > 3.5)
+2. **Decide** — `execute_trade` recomputes net edge (gross spread minus the optimistic cost floor of ~0.175–0.25%) and only proceeds if net edge clears 0.3%
+3. **Execute** — places two simultaneous signed limit orders: long rToken spot, short perp futures, sized at a fixed USDT notional per leg
+4. **Monitor** — the poller re-checks every 5s; when the spread reverts (or after a 60-minute timeout), `close_trade` flattens both legs
+
+### Execution endpoints
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/api/mcp/execute_trade` | POST | Places long rToken + short perp limit orders if net edge clears threshold |
+| `/api/mcp/close_trade` | POST | Flattens both legs — checks rToken balance, sells spot, buys back perp |
 
 ## MCP / Agent Hub Endpoints
 

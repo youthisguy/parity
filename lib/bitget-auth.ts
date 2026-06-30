@@ -33,3 +33,11 @@ export async function bitgetRequest(
 
   return res.json();
 }
+
+export const PERP_TO_RTOKEN: Record<string, string> = {
+  TSLAUSDT:  "RTSLAUSDT",
+  AAPLUSDT:  "RAAPLUSDT",
+  GOOGLUSDT: "RGOOGLUSDT",
+  MSFTUSDT:  "RMSFTUSDT",
+  AMZNUSDT:  "RAMZNUSDT",
+};

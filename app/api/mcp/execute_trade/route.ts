@@ -3,7 +3,7 @@ import { bitgetRequest } from "@/lib/bitget-auth";
 import { Z_THRESHOLD, SPOT_FEE, PERP_TAKER_FEE, SLIPPAGE_RTOKEN, SLIPPAGE_PERP } from "@/lib/constants";
 
 const MIN_EDGE = 0.003; // only execute if expected net edge > 0.3%
-const POSITION_USDT = 100; // $100 per leg — adjust as needed
+const POSITION_USDT = 20; 
 
 export async function POST(req: NextRequest) {
   try {
@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
       productType: "USDT-FUTURES",
       marginMode:  "isolated",
       marginCoin:  "USDT",
-      side:        "open_short",
+      side:        "sell",    
       orderType:   "limit",
       price:       prices.perp_mark.toFixed(2),
       size:        qty,
