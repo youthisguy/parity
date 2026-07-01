@@ -33,6 +33,14 @@ export function computeSpreadStats(
 // ── False-signal filter  
 
 export function isImplausibleTick(prev: Tick | null, curr: Tick): boolean {
+  if (
+    (curr.rtoken_price !== null && curr.rtoken_price <= 0) ||
+    (curr.ontoken_price !== null && curr.ontoken_price <= 0) ||
+    (curr.perp_mark !== null && curr.perp_mark <= 0) ||
+    (curr.perp_index !== null && curr.perp_index <= 0)
+  ) {
+    return true;
+  }
   if (!prev) return false;
   const check = (a: number | null, b: number | null) => {
     if (a == null || b == null || a === 0) return false;
@@ -48,35 +56,39 @@ export function isImplausibleTick(prev: Tick | null, curr: Tick): boolean {
 // ── Spread computation  
 
 export function computeSpreads(tick: Tick): {
-    rtokenVsIndex: number | null;
-    markVsIndex: number | null;
-    rtokenVsMark: number | null;
-    ontokenVsRtoken: number | null;
-    ontokenVsMark: number | null;
-  } {
-    const { rtoken_price, ontoken_price, perp_mark, perp_index } = tick;
-    return {
-      rtokenVsIndex:
-        rtoken_price != null && perp_index != null && perp_index !== 0
-          ? (rtoken_price - perp_index) / perp_index : null,
-      markVsIndex:
-        perp_mark != null && perp_index != null && perp_index !== 0
-          ? (perp_mark - perp_index) / perp_index : null,
-      rtokenVsMark:
-        rtoken_price != null && perp_mark != null && perp_mark !== 0
-          ? (rtoken_price - perp_mark) / perp_mark : null,
-      ontokenVsRtoken:
-        ontoken_price != null && rtoken_price != null && rtoken_price !== 0
-          ? (ontoken_price - rtoken_price) / rtoken_price : null,
-      ontokenVsMark:
-        ontoken_price != null && perp_mark != null && perp_mark !== 0
-          ? (ontoken_price - perp_mark) / perp_mark : null,
-    };
-  }
+  rtokenVsIndex: number | null;
+  markVsIndex: number | null;
+  rtokenVsMark: number | null;
+  ontokenVsRtoken: number | null;
+  ontokenVsMark: number | null;
+} {
+  const { rtoken_price, ontoken_price, perp_mark, perp_index } = tick;
+  return {
+    rtokenVsIndex:
+      rtoken_price != null && rtoken_price > 0 &&
+      perp_index != null && perp_index > 0
+        ? (rtoken_price - perp_index) / perp_index : null,
+    markVsIndex:
+      perp_mark != null && perp_mark > 0 &&
+      perp_index != null && perp_index > 0
+        ? (perp_mark - perp_index) / perp_index : null,
+    rtokenVsMark:
+      rtoken_price != null && rtoken_price > 0 &&
+      perp_mark != null && perp_mark > 0
+        ? (rtoken_price - perp_mark) / perp_mark : null,
+    ontokenVsRtoken:
+      ontoken_price != null && ontoken_price > 0 &&
+      rtoken_price != null && rtoken_price > 0
+        ? (ontoken_price - rtoken_price) / rtoken_price : null,
+    ontokenVsMark:
+      ontoken_price != null && ontoken_price > 0 &&
+      perp_mark != null && perp_mark > 0
+        ? (ontoken_price - perp_mark) / perp_mark : null,
+  };
+}
 
 // ── Full divergence check on a new tick ──────────────────────────────────
 // Pass in the rolling spread history (last ROLLING_WINDOW values per spread type)
-
 export function checkDivergence(
     tick: Tick,
     history: {

@@ -14,6 +14,13 @@ export async function POST(req: NextRequest) {
       Math.abs(spreads.rtoken_vs_index?.z ?? 0)
     );
 
+    if (z > 100) {
+      return NextResponse.json({ 
+        executed: false, 
+        reason: "implausible z-score — data feed error, refusing to execute" 
+      });
+    }
+
     const grossEdge = Math.abs(spreads.rtoken_vs_mark?.spread ?? 0);
     const costs     = (SPOT_FEE + SLIPPAGE_RTOKEN) * 2 + (PERP_TAKER_FEE + SLIPPAGE_PERP) * 2;
     const netEdge   = grossEdge - costs;

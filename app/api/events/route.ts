@@ -11,6 +11,17 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { symbol, ts, spreads, prices } = body;
+    
+    const maxZ = Math.max(
+      Math.abs(spreads.rtoken_vs_index?.z ?? 0),
+      Math.abs(spreads.rtoken_vs_mark?.z ?? 0),
+      Math.abs(spreads.mark_vs_index?.z ?? 0)
+    );
+
+    if (maxZ > 100) {
+      console.warn(`[events] rejected implausible z=${maxZ} for ${symbol} — likely feed error`);
+      return NextResponse.json({ skipped: true, reason: "implausible z-score — data feed error" });
+    }
 
     if (!symbol || !ts || !spreads || !prices) {
       return NextResponse.json({ error: "missing fields" }, { status: 400 });
